@@ -17,10 +17,10 @@ export default function CreatePage() {
   const [state, setState] = useState<CreateState>("input")
   const [secret, setSecret] = useState("")
   const [secretLink, setSecretLink] = useState("")
-  const [blobId, setBlobId] = useState("")
+  const [txHash, setTxHash] = useState("")
   const [error, setError] = useState("")
   const [copied, setCopied] = useState(false)
-  const [blobIdCopied, setBlobIdCopied] = useState(false)
+  const [txHashCopied, setTxHashCopied] = useState(false)
   const [maxRecipients, setMaxRecipients] = useState(1)
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -52,9 +52,9 @@ export default function CreatePage() {
 
       // Step 3: Store on BotChain
       console.log('🔄 About to store on BotChain, data size:', combinedData.length)
-      const { blobId: botchainBlobId } = await storeSecret(combinedData.buffer as ArrayBuffer)
+      const { blobId: botchainBlobId, txHash: botchainTxHash } = await storeSecret(combinedData.buffer as ArrayBuffer)
       console.log('🎯 Got blobId from BotChain:', botchainBlobId)
-      setBlobId(botchainBlobId)
+      setTxHash(botchainTxHash)
 
       // Step 4: Split key and initialize one-time claim gate
       const { share1, share2 } = splitKeyXor(encrypted.key)
@@ -92,20 +92,20 @@ export default function CreatePage() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const copyBlobId = async () => {
-    await navigator.clipboard.writeText(blobId)
-    setBlobIdCopied(true)
-    setTimeout(() => setBlobIdCopied(false), 2000)
+  const copyTxHash = async () => {
+    await navigator.clipboard.writeText(txHash)
+    setTxHashCopied(true)
+    setTimeout(() => setTxHashCopied(false), 2000)
   }
 
   const resetForm = () => {
     setState("input")
     setSecret("")
     setSecretLink("")
-    setBlobId("")
+    setTxHash("")
     setError("")
     setCopied(false)
-    setBlobIdCopied(false)
+    setTxHashCopied(false)
     setMaxRecipients(1)
   }
 
@@ -168,7 +168,7 @@ export default function CreatePage() {
                 </div>
 
                 {/* BotChain Storage Details */}
-                {blobId && (
+                {txHash && (
                 <div className="bg-orange-50/50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 rounded-lg p-3">
                   <div className="flex items-center gap-2 mb-2">
                     <Database className="w-4 h-4 text-orange-600 dark:text-orange-400" />
@@ -179,18 +179,18 @@ export default function CreatePage() {
                   <div className="bg-orange-100/70 dark:bg-orange-900/30 rounded-md p-2 mb-2">
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-xs font-mono text-orange-800 dark:text-orange-200 break-all flex-1">
-                        Transaction ID: {blobId}
+                        Transaction ID: {txHash}
                       </span>
                       <Button
-                        onClick={copyBlobId}
+                        onClick={copyTxHash}
                         size="sm"
                         variant="ghost"
                         className="h-6 px-2 text-orange-600 dark:text-orange-400 hover:bg-orange-200 dark:hover:bg-orange-800"
                       >
-                        {blobIdCopied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                        {txHashCopied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
                       </Button>
                     </div>
-                    {blobIdCopied && <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">✓ ID copied!</p>}
+                    {txHashCopied && <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">✓ ID copied!</p>}
                   </div>
                 </div>
                 )}

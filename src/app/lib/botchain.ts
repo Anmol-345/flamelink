@@ -21,6 +21,7 @@ const FLAMELINK_ABI = [
 export interface StoredSecret {
   blobId: string
   size: number
+  txHash: string
 }
 
 const BURNED_MARKER = 'FLAMELINK_BURNED'
@@ -97,7 +98,7 @@ export async function storeSecret(encryptedData: ArrayBuffer): Promise<StoredSec
     await tx.wait()
     console.log('✅ Secret stored successfully in transaction:', tx.hash)
     
-    return { blobId: id, size: encryptedData.byteLength }
+    return { blobId: id, size: encryptedData.byteLength, txHash: tx.hash }
   } catch (error) {
     console.error('💥 Failed to store secret on BotChain:', error)
     if (error instanceof Error) {
