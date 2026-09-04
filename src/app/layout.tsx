@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "🔥 FlameLink - Decentralized One-Time Secrets",
-  description: "Trustless, unstoppable one-time secrets using Walrus decentralized storage. When it burns, it's gone forever.",
+  title: "🔥 FlameLink - Secure One-Time Text Secrets on BotChain",
+  description: "Zero-knowledge, end-to-end encrypted one-time text secrets using BotChain smart contracts. When it burns, it's wiped from the blockchain forever.",
 };
 
 export default function RootLayout({
