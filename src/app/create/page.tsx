@@ -7,19 +7,15 @@ import { motion } from "framer-motion"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { ArrowLeft, Copy, Check, Lock, Shield, FileText, Upload, Users, Database, ExternalLink } from "lucide-react"
-import { encryptSecret, encryptFile, splitKeyXor, arrayBufferToBase64Url, generateSecretUrlKeySplit } from "../lib/crypto"
-import { storeSecret, storeFile } from "../lib/walrus"
-import FileUpload from "../components/FileUpload"
+import { ArrowLeft, Copy, Check, Lock, Shield, FileText, Users, Database } from "lucide-react"
+import { encryptSecret, splitKeyXor, arrayBufferToBase64Url, generateSecretUrlKeySplit } from "../lib/crypto"
+import { storeSecret } from "../lib/botchain"
 
 type CreateState = "input" | "generating" | "success"
-type ContentType = "text" | "file"
 
 export default function CreatePage() {
   const [state, setState] = useState<CreateState>("input")
-  const [contentType, setContentType] = useState<ContentType>("text")
   const [secret, setSecret] = useState("")
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [secretLink, setSecretLink] = useState("")
   const [blobId, setBlobId] = useState("")
   const [error, setError] = useState("")
@@ -30,25 +26,13 @@ export default function CreatePage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    // Validate input based on content type
-    if (contentType === "text") {
-      if (!secret.trim()) {
-        setError("Please enter a secret to share")
-        return
-      }
-      if (secret.length > 10000) {
-        setError("Secret is too long. Please keep it under 10,000 characters.")
-        return
-      }
-    } else {
-      if (!selectedFile) {
-        setError("Please select a file to share")
-        return
-      }
-      if (selectedFile.size > 50 * 1024 * 1024) { // 50MB limit
-        setError("File is too large. Please keep it under 50MB.")
-        return
-      }
+    if (!secret.trim()) {
+      setError("Please enter a secret to share")
+      return
+    }
+    if (secret.length > 10000) {
+      setError("Secret is too long. Please keep it under 10,000 characters.")
+      return
     }
 
     setState("generating")
@@ -58,30 +42,19 @@ export default function CreatePage() {
       let encrypted: { ciphertext: ArrayBuffer; iv: Uint8Array; key: ArrayBuffer }
       let combinedData: Uint8Array
 
-      if (contentType === "text") {
-        // Step 1: Encrypt the text secret client-side
-        encrypted = await encryptSecret(secret)
+      // Step 1: Encrypt the text secret client-side
+      encrypted = await encryptSecret(secret)
 
-        // Step 2: Combine encrypted data with IV for storage
-        combinedData = new Uint8Array(encrypted.iv.length + encrypted.ciphertext.byteLength)
-        combinedData.set(encrypted.iv, 0)
-        combinedData.set(new Uint8Array(encrypted.ciphertext), encrypted.iv.length)
-      } else {
-        // Step 1: Encrypt the file client-side
-        encrypted = await encryptFile(selectedFile!)
+      // Step 2: Combine encrypted data with IV for storage
+      combinedData = new Uint8Array(encrypted.iv.length + encrypted.ciphertext.byteLength)
+      combinedData.set(encrypted.iv, 0)
+      combinedData.set(new Uint8Array(encrypted.ciphertext), encrypted.iv.length)
 
-        // Step 2: Combine encrypted data with IV for storage
-        combinedData = new Uint8Array(encrypted.iv.length + encrypted.ciphertext.byteLength)
-        combinedData.set(encrypted.iv, 0)
-        combinedData.set(new Uint8Array(encrypted.ciphertext), encrypted.iv.length)
-      }
-
-      // Step 3: Store on Walrus
-      console.log('🔄 About to store on Walrus, data size:', combinedData.length)
-      const { blobId: walrusBlobId } = await storeSecret(combinedData.buffer as ArrayBuffer)
-      console.log('🎯 Got blobId from Walrus:', walrusBlobId)
-      setBlobId(walrusBlobId)
-      console.log('✅ BlobId state updated:', walrusBlobId)
+      // Step 3: Store on BotChain
+      console.log('🔄 About to store on BotChain, data size:', combinedData.length)
+      const { blobId: botchainBlobId } = await storeSecret(combinedData.buffer as ArrayBuffer)
+      console.log('🎯 Got blobId from BotChain:', botchainBlobId)
+      setBlobId(botchainBlobId)
 
       // Step 4: Split key and initialize one-time claim gate
       const { share1, share2 } = splitKeyXor(encrypted.key)
@@ -102,11 +75,11 @@ export default function CreatePage() {
       const { claimId, token } = await initRes.json()
 
       // Step 5: Generate shareable URL with key share and claim info
-      const secretUrl = generateSecretUrlKeySplit(walrusBlobId, share1, encrypted.iv, claimId, token)
+      const secretUrl = generateSecretUrlKeySplit(botchainBlobId, share1, encrypted.iv, claimId, token)
 
       setSecretLink(secretUrl)
       setState("success")
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to create secret:", err)
       setError(err instanceof Error ? err.message : "Failed to create secret. Please try again.")
       setState("input")
@@ -128,25 +101,12 @@ export default function CreatePage() {
   const resetForm = () => {
     setState("input")
     setSecret("")
-    setSelectedFile(null)
     setSecretLink("")
     setBlobId("")
     setError("")
     setCopied(false)
     setBlobIdCopied(false)
     setMaxRecipients(1)
-  }
-
-  const handleFileSelected = (file: File) => {
-    setSelectedFile(file)
-    setError("") // Clear any existing errors
-  }
-
-  const switchContentType = (type: ContentType) => {
-    setContentType(type)
-    setSecret("")
-    setSelectedFile(null)
-    setError("")
   }
 
   if (state === "generating") {
@@ -159,11 +119,9 @@ export default function CreatePage() {
           className="text-center max-w-sm"
         >
           <div className="w-6 h-6 border-2 border-muted border-t-foreground rounded-full animate-spin mx-auto mb-6"></div>
-          <h2 className="text-xl font-medium mb-4 text-foreground">Creating secure link</h2>
+          <h2 className="text-xl font-medium mb-4 text-foreground">Creating secure link on BotChain...</h2>
           <p className="text-sm text-muted-foreground">
-            {contentType === "text" 
-              ? "Encrypting and storing your secret..." 
-              : "Encrypting and uploading your file..."}
+            Please approve the transaction in your Web3 wallet.
           </p>
         </motion.div>
       </div>
@@ -191,7 +149,7 @@ export default function CreatePage() {
                 </div>
                 <h1 className="text-2xl font-medium mb-2 text-foreground">Link created</h1>
                 <p className="text-muted-foreground text-sm max-w-sm mx-auto">
-                  Your {contentType === "text" ? "secret" : "file"} is encrypted and ready to share. The link can be accessed by up to {maxRecipients} {maxRecipients === 1 ? "person" : "people"}.
+                  Your secret is encrypted and stored on BotChain. The link can be accessed by up to {maxRecipients} {maxRecipients === 1 ? "person" : "people"}.
                 </p>
               </div>
 
@@ -209,30 +167,30 @@ export default function CreatePage() {
                   {copied && <p className="text-xs text-green-600 dark:text-green-400 mt-2 font-medium">✓ Link copied to clipboard</p>}
                 </div>
 
-                {/* Walrus Storage Details */}
+                {/* BotChain Storage Details */}
                 {blobId && (
-                <div className="bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+                <div className="bg-orange-50/50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 rounded-lg p-3">
                   <div className="flex items-center gap-2 mb-2">
-                    <Database className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                    <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
-                      Stored on Walrus Network
+                    <Database className="w-4 h-4 text-orange-600 dark:text-orange-400" />
+                    <span className="text-sm font-medium text-orange-900 dark:text-orange-100">
+                      Stored on BotChain Mainnet
                     </span>
                   </div>
-                  <div className="bg-blue-100/70 dark:bg-blue-900/30 rounded-md p-2 mb-2">
+                  <div className="bg-orange-100/70 dark:bg-orange-900/30 rounded-md p-2 mb-2">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-mono text-blue-800 dark:text-blue-200 break-all flex-1">
-                        Blob ID: {blobId}
+                      <span className="text-xs font-mono text-orange-800 dark:text-orange-200 break-all flex-1">
+                        Transaction ID: {blobId}
                       </span>
                       <Button
                         onClick={copyBlobId}
                         size="sm"
                         variant="ghost"
-                        className="h-6 px-2 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-800"
+                        className="h-6 px-2 text-orange-600 dark:text-orange-400 hover:bg-orange-200 dark:hover:bg-orange-800"
                       >
                         {blobIdCopied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
                       </Button>
                     </div>
-                    {blobIdCopied && <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">✓ Blob ID copied!</p>}
+                    {blobIdCopied && <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">✓ ID copied!</p>}
                   </div>
                 </div>
                 )}
@@ -288,38 +246,10 @@ export default function CreatePage() {
               <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center mx-auto mb-4">
                 <Lock className="w-5 h-5 text-primary-foreground" />
               </div>
-              <h1 className="text-2xl font-medium mb-2 text-foreground">Share securely</h1>
+              <h1 className="text-2xl font-medium mb-2 text-foreground">Share securely on BotChain</h1>
               <p className="text-muted-foreground text-sm max-w-sm mx-auto">
-                Send sensitive information with end-to-end encryption and automatic destruction.
+                Send text secrets with end-to-end encryption. The data is stored in a smart contract and requires a small gas fee to create.
               </p>
-            </div>
-
-            {/* Content Type Tabs */}
-            <div className="flex bg-muted rounded-lg p-1">
-              <button
-                type="button"
-                onClick={() => switchContentType("text")}
-                className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-                  contentType === "text"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <FileText className="w-4 h-4" />
-                Text Secret
-              </button>
-              <button
-                type="button"
-                onClick={() => switchContentType("file")}
-                className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-                  contentType === "file"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <Upload className="w-4 h-4" />
-                File Upload
-              </button>
             </div>
 
             {/* Recipients Selector */}
@@ -353,25 +283,17 @@ export default function CreatePage() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
-              {contentType === "text" ? (
-                <div className="space-y-2">
-                  <Textarea
-                    id="secret"
-                    value={secret}
-                    onChange={(e) => setSecret(e.target.value)}
-                    placeholder="Enter your secret here..."
-                    className="min-h-[140px] resize-none border-border focus:border-ring transition-colors bg-background text-sm"
-                  />
-                  <div className="flex justify-between items-center text-xs">
-                  </div>
-                </div>
-              ) : (
-                <FileUpload 
-                  onFileSelected={handleFileSelected}
-                  maxSizeBytes={50 * 1024 * 1024} // 50MB
-                  disabled={state !== "input"}
+              <div className="space-y-2">
+                <Textarea
+                  id="secret"
+                  value={secret}
+                  onChange={(e) => setSecret(e.target.value)}
+                  placeholder="Enter your secret here..."
+                  className="min-h-[140px] resize-none border-border focus:border-ring transition-colors bg-background text-sm"
                 />
-              )}
+                <div className="flex justify-between items-center text-xs">
+                </div>
+              </div>
 
               {error && (
                 <div className="bg-destructive/10 border border-destructive/20 text-destructive px-3 py-2 rounded-lg text-sm">
@@ -381,12 +303,10 @@ export default function CreatePage() {
 
               <Button 
                 type="submit" 
-                disabled={
-                  contentType === "text" ? !secret.trim() : !selectedFile
-                } 
+                disabled={!secret.trim()} 
                 className="w-full"
               >
-                Create secure link
+                Create secure link & Pay Gas
               </Button>
             </form>
 
@@ -396,7 +316,7 @@ export default function CreatePage() {
                 <span>•</span>
                 <span>Self-destructing</span>
                 <span>•</span>
-                <span>Zero-knowledge</span>
+                <span>BotChain Mainnet</span>
               </div>
             </div>
           </div>

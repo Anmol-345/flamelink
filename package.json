@@ -8,11 +8,10 @@
     "start": "next start"
   },
   "dependencies": {
-    "@mysten/seal": "^0.8.0",
-    "@mysten/sui": "^1.38.0",
     "@radix-ui/react-slot": "^1.2.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "ethers": "^6.17.0",
     "framer-motion": "^12.23.22",
     "lucide-react": "^0.544.0",
     "next": "15.5.4",

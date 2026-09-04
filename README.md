@@ -1,8 +1,8 @@
-# 🔥 FlameLink — Cryptographically Guaranteed One‑Time Secrets
+# 🔥 FlameLink — Cryptographically Guaranteed One‑Time Secrets on BotChain
 
-FlameLink is a decentralized, zero‑knowledge one‑time secret sharing app. It encrypts secrets in the browser, stores only ciphertext on the Walrus network, and releases the missing key share via a one‑time claim gate. Without both key shares, decryption is impossible.
+FlameLink is a decentralized, zero‑knowledge one‑time secret sharing app. It encrypts secrets in the browser, stores only ciphertext on the **BotChain EVM Mainnet**, and releases the missing key share via a one‑time claim gate. Without both key shares, decryption is impossible.
 
-— Built with Next.js 15, React 19, Walrus, and the Web Crypto API.
+— Built with Next.js 15, React 19, BotChain (EVM), and the Web Crypto API.
 
 ## ✨ What problem does it solve?
 
@@ -10,7 +10,7 @@ FlameLink is a decentralized, zero‑knowledge one‑time secret sharing app. It
 - **Fake one‑time “flags”**: Many services enforce one‑time access with a database flag, not cryptography.
 - **Censorship and outages**: Centralized storage can be blocked or taken down.
 
-FlameLink provides mathematical guarantees: client‑side encryption, decentralized storage, and a cryptographic one‑time claim gate.
+FlameLink provides mathematical guarantees: client‑side encryption, decentralized smart contract storage, and a cryptographic one‑time claim gate.
 
 ## 🧠 How it works (high‑level)
 
@@ -18,36 +18,37 @@ FlameLink provides mathematical guarantees: client‑side encryption, decentrali
 Create secret
   -> Encrypt in browser (AES‑256‑GCM)
   -> Split key: K = K1 XOR K2
-  -> Store ciphertext on Walrus
+  -> Store ciphertext on BotChain Smart Contract (Creator pays Gas)
   -> Store K2 in claim gate
   -> Generate one‑time link
 Recipient opens link
   -> Claim K2 once
   -> Reconstruct key (K1 XOR K2) and decrypt client‑side
-  -> Secret burned forever (uses decremented until 0)
+  -> Secret burned from BotChain (Recipient pays Gas to burn)
 ```
 
 ### URL format
-`/secret/{blobId}#K1_b64url.IV_b64url.claimId.token_b64url`
+`/secret/{transactionId}#K1_b64url.IV_b64url.claimId.token_b64url`
 
-- `blobId`: Walrus content address for ciphertext
+- `transactionId`: BotChain Transaction ID for ciphertext
 - `K1`, `IV`: client‑only; never sent to server (URL fragment)
 - `claimId`, `token`: authenticate one‑time claim for `K2`
 
 ## 🔬 Detailed flow
 
 ```
-Creator -> Browser: enter secret
+Creator -> Browser: enter text secret
 Browser: encrypt (AES‑256‑GCM)
 Browser: split key (K1, K2)
-Browser -> Walrus: PUT [IV|ciphertext] => blobId
+Browser -> BotChain: sendTransaction to storeSecret(id, ciphertext)
 Browser -> Claim API: POST /api/claim/init {K2, ttl, maxUses} => {claimId, token}
-Browser -> Creator: share /secret/{blobId}#K1.IV.claimId.token
+Browser -> Creator: share /secret/{id}#K1.IV.claimId.token
 
 Recipient -> Browser: open link
 Browser -> Claim API: POST /api/claim {claimId, token} => K2 (once/up to maxUses)
-Browser -> Walrus: GET /v1/blobs/{blobId} => [IV|ciphertext]
-Browser: reconstruct key + decrypt; show secret; show uses remaining
+Browser -> BotChain: call getSecret(id) => ciphertext
+Browser: reconstruct key + decrypt; show secret
+Browser -> BotChain: sendTransaction to burnSecret(id)
 ```
 
 ## 🧩 Architecture
@@ -56,29 +57,26 @@ Browser: reconstruct key + decrypt; show secret; show uses remaining
 [App]
   - React UI
   - crypto.ts
-  - walrus.ts
+  - botchain.ts
   - /api/claim, /api/claim/init
 
-[Walrus Network]
-  - Publisher
-  - Aggregator
-  - Distributed Storage
+[BotChain Mainnet]
+  - EVM Smart Contract (Flamelink.sol)
 
 Flows:
   UI <-> crypto.ts
-  UI <-> walrus.ts
+  UI <-> botchain.ts
   UI <-> API
-  walrus.ts -> Publisher (store)
-  Aggregator -> UI (retrieve)
+  botchain.ts -> BotChain (store/retrieve/burn)
 ```
 
-### Walrus endpoints (currently configured)
-- Publisher: `http://walrus-publisher-testnet.haedal.xyz:9001/v1/blobs?deletable=true&epochs=1`
-- Aggregator: `https://walrus-testnet.blockscope.net/v1/blobs/{blobId}`
+### BotChain endpoints (currently configured)
+- RPC: `https://rpc.botchain.ai`
+- Chain ID: `677`
 
 ## 🚀 Quickstart
 
-Prereqs: Node 18+ recommended.
+Prereqs: Node 18+ recommended. Web3 Wallet (e.g., MetaMask) required.
 
 ```bash
 npm install
@@ -87,14 +85,14 @@ npm run dev
 ```
 
 Create a link:
-1) Go to Create, paste secret or upload file.
-2) Choose allowed views (1‑5). 
+1) Go to Create, paste secret text.
+2) Connect Wallet to pay gas on BotChain.
 3) Generate link and share it.
 
 ## 🖥️ Usage
 
-- Creator: Generate and share the link.
-- Recipient: Open link, click Reveal. If first/allowed use, the secret is decrypted locally and shown. Subsequent attempts show “already burned” or “all uses exhausted.”
+- Creator: Generate and share the link. Requires BOT tokens for gas.
+- Recipient: Open link, click Reveal. The recipient must sign a burn transaction to destroy the secret on-chain.
 
 ## 🔐 Security model
 
@@ -102,7 +100,7 @@ Create a link:
 - **Key separation**: K = K1 ⊕ K2; neither share alone is useful.
 - **One‑time/multi‑use gate**: `maxUses` 1‑5 with atomic decrement.
 - **Client‑side crypto**: Web Crypto API, AES‑256‑GCM.
-- **Decentralized storage**: Ciphertext on Walrus; immutable and censorship‑resistant.
+- **Decentralized storage**: Ciphertext on BotChain EVM smart contracts.
 
 ## 🛠️ API
 
@@ -117,17 +115,11 @@ Create a link:
 ## ⚙️ Implementation notes
 
 - Key split/URL helpers live in `src/app/lib/crypto.ts`.
-- Walrus integration in `src/app/lib/walrus.ts`.
-- Creation flow in `src/app/create/page.tsx` and `src/app/components`.
+- BotChain EVM integration in `src/app/lib/botchain.ts`.
+- Creation flow in `src/app/create/page.tsx`.
 - Reveal flow in `src/app/secret/[blobId]/page.tsx`.
 
 ## 📦 Deployment (production tips)
 
 - Replace in‑memory claim store with Redis/Upstash KV.
-- Add rate‑limiting and monitoring.
-- Point to Walrus mainnet endpoints when available.
-
-## 🙌 Credits
-
-Built with Next.js, React, Walrus, and Web Crypto API.
-
+- Deploy `contracts/Flamelink.sol` to BotChain mainnet and update the address in `botchain.ts`.

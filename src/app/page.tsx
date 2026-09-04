@@ -128,7 +128,7 @@ export default function Home() {
             {
               icon: Database,
               title: "Decentralized Storage",
-              description: "Stored on Walrus network with no single point of failure or censorship.",
+              description: "Stored on BotChain EVM Mainnet using secure smart contracts.",
             },
             {
               icon: Eye,
