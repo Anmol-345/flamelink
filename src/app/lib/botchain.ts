@@ -30,7 +30,7 @@ async function getProviderAndContract(requireSigner = false) {
     throw new Error('Please install a Web3 wallet like MetaMask')
   }
 
-  const provider = new BrowserProvider((window as any).ethereum)
+  const provider = new BrowserProvider((window as any).ethereum, "any")
   
   // Ensure we are on the right network (BotChain)
   const network = await provider.getNetwork()
@@ -120,7 +120,7 @@ export async function retrieveSecret(blobId: string): Promise<ArrayBuffer> {
   console.log('📥 Retrieving secret from BotChain:', { id })
 
   try {
-    const provider = new BrowserProvider((window as any).ethereum)
+    const provider = new BrowserProvider((window as any).ethereum, "any")
     const contract = new Contract(FLAMELINK_CONTRACT_ADDRESS, FLAMELINK_ABI, provider)
     
     const ciphertextBase64 = await contract.getSecret(id)
